@@ -5,6 +5,7 @@ import time
 from queue import Queue
 from pedido import Pedido  # Importar la clase Pedido
 
+
 class CentralDePedidos:
     def __init__(self, host, puerto, max_pedidos, productos):
         """
@@ -36,7 +37,9 @@ class CentralDePedidos:
             cliente_socket, cliente_direccion = servidor_socket.accept()
             print(f"Conexión establecida con {cliente_direccion}")
 
-            hilo_cliente = threading.Thread(target=self.gestionar_cliente, args=(cliente_socket,))
+            hilo_cliente = threading.Thread(
+                target=self.gestionar_cliente, args=(cliente_socket,)
+            )
             hilo_cliente.start()
 
     def gestionar_cliente(self, cliente_socket):
@@ -45,20 +48,38 @@ class CentralDePedidos:
         :param cliente_socket: Socket del cliente conectado.
         """
         cliente_id = cliente_socket.getpeername()
-        cliente_socket.sendall("Bienvenido a la central de pedidos.\n".encode('utf-8'))
+        cliente_socket.sendall("Bienvenido a la central de pedidos.\n".encode("utf-8"))
 
         while True:
-            datos = cliente_socket.recv(1024).decode('utf-8')
+            datos = cliente_socket.recv(1024).decode("utf-8")
             if not datos:
                 break
 
-            producto, cantidad = datos.split(',')
-            cantidad = int(cantidad)
+            if datos == "LISTAR_PRODUCTOS":
+                # Enviar la lista de productos al cliente
+                productos_str = "\n".join(
+                    [
+                        f"{producto}: {cantidad}"
+                        for producto, cantidad in self.productos.items()
+                    ]
+                )
+                cliente_socket.sendall(productos_str.encode("utf-8"))
+            else:
+                # Manejar pedidos
+                try:
+                    producto, cantidad = datos.split(",")
+                    cantidad = int(cantidad)
 
-            pedido = Pedido(cliente_id, producto, cantidad)
-            self.encolar_pedido(pedido)
+                    pedido = Pedido(cliente_id, producto, cantidad)
+                    self.encolar_pedido(pedido)
 
-            cliente_socket.sendall(f"Pedido de {producto} recibido.\n".encode('utf-8'))
+                    cliente_socket.sendall(
+                        f"Pedido de {producto} recibido.\n".encode("utf-8")
+                    )
+                except ValueError:
+                    cliente_socket.sendall(
+                        "Error: Formato de pedido inválido.\n".encode("utf-8")
+                    )
 
         cliente_socket.close()
 
