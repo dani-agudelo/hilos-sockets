@@ -120,6 +120,9 @@ class CentralDePedidos:
                     )
                 )
 
+            # Volver a enviar las opciones después de cada acción
+            cliente_socket.sendall(opciones.encode("utf-8"))
+
         cliente_socket.close()
 
     def encolar_pedido(self, pedido):
