@@ -13,5 +13,13 @@ if __name__ == "__main__":
         if comando == "3":  # Salir
             cliente.cerrar_conexion()
             break
+        elif comando == "2":  # Hacer pedido
+            print("Ingrese los pedidos en el formato 'producto,cantidad'. Escriba 'FIN' para terminar:")
+            while True:
+                pedido = input("Escribe el producto y cantidad: ").strip()
+                if pedido.upper() == "FIN":
+                    cliente.enviar_comando("FIN")
+                    break
+                cliente.enviar_comando(pedido)
         else:
             cliente.enviar_comando(comando)
