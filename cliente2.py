@@ -15,6 +15,18 @@ def iniciar_cliente():
             comando = input("Escribe tu opción: ").strip()
             client.sendall(comando.encode('utf-8'))
 
+            if comando == "2":  # Hacer pedido
+                respuesta = client.recv(1024).decode('utf-8')
+                print(respuesta)
+                while True:
+                    pedido = input("Pedido (producto,cantidad) o FIN para terminar: ").strip()
+                    client.sendall(pedido.encode('utf-8'))
+                    respuesta = client.recv(1024).decode('utf-8')
+                    print(respuesta)
+                    if pedido.upper() == "FIN":
+                        break
+                continue  # Volver al menú principal
+
             if comando == "3":  # Salir
                 respuesta = client.recv(1024).decode('utf-8')
                 print(respuesta)
@@ -26,5 +38,5 @@ def iniciar_cliente():
         print("Cerrando conexión")
         client.close()
 
-if __name__ == "__main__":
+if __name__ == "_main_":
     iniciar_cliente()
