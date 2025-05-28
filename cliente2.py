@@ -11,14 +11,22 @@ if __name__ == "__main__":
     while True:
         comando = input("Escribe tu opción: ").strip()
         if comando == "3":  # Salir
+            cliente.enviar_comando("3")  # Enviar opción antes de cerrar
+            respuesta = cliente.cliente_socket.recv(1024).decode("utf-8")
+            print(respuesta)
             cliente.cerrar_conexion()
             break
         elif comando == "2":  # Hacer pedido
-            print("Ingrese los pedidos en el formato 'producto,cantidad'. Escriba 'FIN' para terminar:")
+            cliente.enviar_comando("2")
+            respuesta = cliente.cliente_socket.recv(1024).decode("utf-8")
+            print(respuesta)
+
             while True:
                 pedido = input("Escribe el producto y cantidad: ").strip()
                 if pedido.upper() == "FIN":
                     cliente.enviar_comando("FIN")
+                    respuesta = cliente.cliente_socket.recv(1024).decode("utf-8")
+                    print(respuesta)
                     break
                 cliente.enviar_comando(pedido)
                 respuesta = cliente.cliente_socket.recv(1024).decode("utf-8")

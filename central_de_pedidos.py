@@ -73,9 +73,7 @@ class CentralDePedidos:
                 )
             elif datos == "2":  # Hacer pedido
                 cliente_socket.sendall(
-                    "Ingrese los pedidos en el formato 'producto,cantidad'. Escriba 'FIN' para terminar:\n".encode(
-                        "utf-8"
-                    )
+                    "Ingrese los pedidos en el formato 'producto,cantidad'. Escriba 'FIN' para terminar:\n".encode("utf-8")
                 )
                 while True:
                     pedido_datos = cliente_socket.recv(1024).decode("utf-8")
@@ -87,10 +85,7 @@ class CentralDePedidos:
                         producto = producto.upper()  # Convertir a mayúsculas
                         cantidad = int(cantidad)
 
-                        if (
-                            producto in self.productos
-                            and self.productos[producto] >= cantidad
-                        ):
+                        if producto in self.productos and self.productos[producto] >= cantidad:
                             pedido = Pedido(cliente_id, producto, cantidad)
                             self.encolar_pedido(pedido)
                             cliente_socket.sendall(
@@ -98,16 +93,18 @@ class CentralDePedidos:
                             )
                         else:
                             cliente_socket.sendall(
-                                f"Error: Producto no disponible o cantidad insuficiente.\n".encode(
-                                    "utf-8"
-                                )
+                                f"Error: Producto no disponible o cantidad insuficiente.\n".encode("utf-8")
                             )
                     except ValueError:
                         cliente_socket.sendall(
-                            "Error: Formato de pedido inválido. Use 'producto,cantidad'.\n".encode(
-                                "utf-8"
-                            )
+                            "Error: Formato de pedido inválido. Use 'producto,cantidad'.\n".encode("utf-8")
                         )
+                
+                # ⬇️ Este menú se envía solo cuando ya terminó el bucle de pedidos
+                cliente_socket.sendall(
+                    "Opciones disponibles:\n1. Listar productos\n2. Hacer pedido\n3. Salir\n".encode("utf-8")
+                )
+
             elif datos == "3":  # Salir
                 cliente_socket.sendall(
                     "Gracias por usar la central de pedidos. Adiós!\n".encode("utf-8")
