@@ -73,25 +73,40 @@ class CentralDePedidos:
                 )
             elif datos == "2":  # Hacer pedido
                 cliente_socket.sendall(
-                    "Ingrese el pedido en el formato 'producto,cantidad':\n".encode(
+                    "Ingrese los pedidos en el formato 'producto,cantidad'. Escriba 'FIN' para terminar:\n".encode(
                         "utf-8"
                     )
                 )
-                pedido_datos = cliente_socket.recv(1024).decode("utf-8")
-                try:
-                    producto, cantidad = pedido_datos.split(",")
-                    cantidad = int(cantidad)
+                while True:
+                    pedido_datos = cliente_socket.recv(1024).decode("utf-8")
+                    if pedido_datos.upper() == "FIN":
+                        cliente_socket.sendall("Pedidos finalizados.\n".encode("utf-8"))
+                        break
+                    try:
+                        producto, cantidad = pedido_datos.split(",")
+                        cantidad = int(cantidad)
 
-                    pedido = Pedido(cliente_id, producto, cantidad)
-                    self.encolar_pedido(pedido)
-
-                    cliente_socket.sendall(
-                        f"Pedido de {producto} recibido.\n".encode("utf-8")
-                    )
-                except ValueError:
-                    cliente_socket.sendall(
-                        "Error: Formato de pedido inválido.\n".encode("utf-8")
-                    )
+                        if (
+                            producto in self.productos
+                            and self.productos[producto] >= cantidad
+                        ):
+                            pedido = Pedido(cliente_id, producto, cantidad)
+                            self.encolar_pedido(pedido)
+                            cliente_socket.sendall(
+                                f"Pedido de {producto} recibido.\n".encode("utf-8")
+                            )
+                        else:
+                            cliente_socket.sendall(
+                                f"Error: Producto no disponible o cantidad insuficiente.\n".encode(
+                                    "utf-8"
+                                )
+                            )
+                    except ValueError:
+                        cliente_socket.sendall(
+                            "Error: Formato de pedido inválido. Use 'producto,cantidad'.\n".encode(
+                                "utf-8"
+                            )
+                        )
             elif datos == "3":  # Salir
                 cliente_socket.sendall(
                     "Gracias por usar la central de pedidos. Adiós!\n".encode("utf-8")
