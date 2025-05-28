@@ -4,20 +4,32 @@ class Cliente:
     def __init__(self, host, puerto):
         self.host = host
         self.puerto = puerto
+        self.cliente_socket = None
 
-    def mostrar_productos(self):
+    def conectar(self):
         try:
-            cliente_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            cliente_socket.connect((self.host, self.puerto))
-            
-            # Solicitar productos al servidor
-            cliente_socket.sendall(b"LISTAR_PRODUCTOS")
-            
-            # Recibir y mostrar productos
-            productos = cliente_socket.recv(1024).decode("utf-8")
-            print("Productos disponibles:")
-            print(productos)
-            
-            cliente_socket.close()
+            self.cliente_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.cliente_socket.connect((self.host, self.puerto))
+            print("Conexión establecida con el servidor.")
         except Exception as e:
-            print(f"Error al mostrar productos: {e}")
+            print(f"Error al conectar con el servidor: {e}")
+
+    def enviar_comando(self, comando):
+        try:
+            if self.cliente_socket:
+                # Enviar comando al servidor
+                self.cliente_socket.sendall(comando.encode("utf-8"))
+                
+                # Recibir respuesta del servidor
+                respuesta = self.cliente_socket.recv(1024).decode("utf-8")
+                print("Respuesta del servidor:")
+                print(respuesta)
+            else:
+                print("No hay conexión activa con el servidor.")
+        except Exception as e:
+            print(f"Error al enviar comando: {e}")
+
+    def cerrar_conexion(self):
+        if self.cliente_socket:
+            self.cliente_socket.close()
+            print("Conexión cerrada.")
