@@ -1,4 +1,5 @@
 from central_de_pedidos import CentralDePedidos
+from cliente import Cliente
 import threading
 
 if __name__ == "__main__":
