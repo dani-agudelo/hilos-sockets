@@ -73,8 +73,8 @@ class CentralDePedidos:
                 break
             try:
                 producto, cantidad = pedido_datos.split(",")
-                producto = producto.upper()
-                cantidad = int(cantidad)
+                producto = producto.strip().upper()
+                cantidad = int(cantidad.strip())
 
                 if producto in self.productos and self.productos[producto] >= cantidad:
                     pedido = Pedido(cliente_socket.getpeername(), producto, cantidad)
