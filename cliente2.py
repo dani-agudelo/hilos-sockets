@@ -1,32 +1,30 @@
-from cliente import Cliente  # Importar la clase Cliente
+import socket
 
-def manejar_opcion(cliente, comando):
-    if comando == "1":  # Listar productos
-        cliente.enviar_comando("1")
-    elif comando == "2":  # Hacer pedido
-        cliente.enviar_comando("2")
+def iniciar_cliente():
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_address = ('192.168.80.224', 9000)
+    print(f"Conectándose a {server_address[0]} puerto {server_address[1]}")
+    client.connect(server_address)
+
+    try:
+        # Recibir mensaje de bienvenida
+        data = client.recv(1024)
+        print(data.decode('utf-8'))
+
         while True:
-            pedido = input("Escribe el producto y cantidad: ").strip()
-            if pedido.upper() == "FIN":
-                cliente.enviar_comando("FIN")
+            comando = input("Escribe tu opción: ").strip()
+            client.sendall(comando.encode('utf-8'))
+
+            if comando == "3":  # Salir
+                respuesta = client.recv(1024).decode('utf-8')
+                print(respuesta)
                 break
-            cliente.enviar_comando(pedido)
-    elif comando == "3":  # Salir
-        cliente.enviar_comando("3")
-        cliente.cerrar_conexion()
-        return False
-    else:
-        cliente.enviar_comando(comando)
-    return True
+
+            respuesta = client.recv(1024).decode('utf-8')
+            print(respuesta)
+    finally:
+        print("Cerrando conexión")
+        client.close()
 
 if __name__ == "__main__":
-    cliente = Cliente("192.168.80.224", 9000)
-    cliente.conectar()
-
-    respuesta_inicial = cliente.cliente_socket.recv(1024).decode("utf-8")
-    print(respuesta_inicial)
-
-    while True:
-        comando = input("Escribe tu opción: ").strip()
-        if not manejar_opcion(cliente, comando):
-            break
+    iniciar_cliente()
