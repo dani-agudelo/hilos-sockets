@@ -5,8 +5,8 @@ if __name__ == "__main__":
     cliente.conectar()
 
     while True:
-        comando = input("Escribe un comando (LISTAR_PRODUCTOS o SALIR): ").strip()
-        if comando.upper() == "SALIR":
+        comando = input("Escribe tu opción: ").strip()  # El servidor ya envió las opciones
+        if comando == "3":  # Salir
             cliente.cerrar_conexion()
             break
         else:

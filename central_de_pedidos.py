@@ -48,26 +48,38 @@ class CentralDePedidos:
         :param cliente_socket: Socket del cliente conectado.
         """
         cliente_id = cliente_socket.getpeername()
-        cliente_socket.sendall("Bienvenido a la central de pedidos.\n".encode("utf-8"))
+
+        # Enviar mensaje de bienvenida y opciones al cliente
+        bienvenida = "Bienvenido a la central de pedidos.\n"
+        opciones = (
+            "Opciones disponibles:\n1. Listar productos\n2. Hacer pedido\n3. Salir\n"
+        )
+        cliente_socket.sendall((bienvenida + opciones).encode("utf-8"))
 
         while True:
             datos = cliente_socket.recv(1024).decode("utf-8")
             if not datos:
                 break
 
-            if datos == "LISTAR_PRODUCTOS":
-                # Enviar la lista de productos al cliente
+            if datos == "1":  # Listar productos
                 productos_str = "\n".join(
                     [
                         f"{producto}: {cantidad}"
                         for producto, cantidad in self.productos.items()
                     ]
                 )
-                cliente_socket.sendall(productos_str.encode("utf-8"))
-            else:
-                # Manejar pedidos
+                cliente_socket.sendall(
+                    ("Productos disponibles:\n" + productos_str).encode("utf-8")
+                )
+            elif datos == "2":  # Hacer pedido
+                cliente_socket.sendall(
+                    "Ingrese el pedido en el formato 'producto,cantidad':\n".encode(
+                        "utf-8"
+                    )
+                )
+                pedido_datos = cliente_socket.recv(1024).decode("utf-8")
                 try:
-                    producto, cantidad = datos.split(",")
+                    producto, cantidad = pedido_datos.split(",")
                     cantidad = int(cantidad)
 
                     pedido = Pedido(cliente_id, producto, cantidad)
@@ -80,6 +92,17 @@ class CentralDePedidos:
                     cliente_socket.sendall(
                         "Error: Formato de pedido inválido.\n".encode("utf-8")
                     )
+            elif datos == "3":  # Salir
+                cliente_socket.sendall(
+                    "Gracias por usar la central de pedidos. Adiós!\n".encode("utf-8")
+                )
+                break
+            else:
+                cliente_socket.sendall(
+                    "Opción inválida. Por favor, elija una opción válida.\n".encode(
+                        "utf-8"
+                    )
+                )
 
         cliente_socket.close()
 
