@@ -21,5 +21,9 @@ if __name__ == "__main__":
                     cliente.enviar_comando("FIN")
                     break
                 cliente.enviar_comando(pedido)
+                respuesta = cliente.cliente_socket.recv(1024).decode("utf-8")
+                print(respuesta)
         else:
             cliente.enviar_comando(comando)
+            respuesta = cliente.cliente_socket.recv(1024).decode("utf-8")
+            print(respuesta)

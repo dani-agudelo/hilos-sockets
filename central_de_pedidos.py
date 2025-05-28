@@ -84,6 +84,7 @@ class CentralDePedidos:
                         break
                     try:
                         producto, cantidad = pedido_datos.split(",")
+                        producto = producto.upper()  # Convertir a mayúsculas
                         cantidad = int(cantidad)
 
                         if (
