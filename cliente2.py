@@ -38,5 +38,5 @@ def iniciar_cliente():
         print("Cerrando conexión")
         client.close()
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     iniciar_cliente()
