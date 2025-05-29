@@ -5,6 +5,10 @@ import time
 from queue import Queue
 from pedido import Pedido  # Importar la clase Pedido
 
+# Definir un tipo de "pedido" especial para la señal de inicio
+# Podría ser una clase simple o un string, para simplicidad usaremos un string.
+INICIO_PROCESAMIENTO_SIGNAL = "INICIO_PROCESAMIENTO"
+
 class CentralDePedidos:
     def __init__(self, host, puerto, max_pedidos, productos):
         """
@@ -21,15 +25,11 @@ class CentralDePedidos:
         self.semaforo = threading.Semaphore(max_pedidos)  # Semáforo para controlar la capacidad de la cola
         self.lock = threading.Lock()  # Lock para sincronizar el acceso a la cola y al stock
         
-        # **Sincronización para el inicio de procesamiento de pedidos**
-        # La barrera ahora espera que 3 hilos de clientes se conecten.
+        # Sincronización para el inicio de procesamiento de pedidos
+        # La barrera espera que 3 hilos de clientes se conecten.
         self.NUM_CLIENTES_REQUERIDOS = 3 
         self.barrera_clientes = threading.Barrier(self.NUM_CLIENTES_REQUERIDOS)
         
-        # Variable de condición para indicar a los hilos procesadores que pueden iniciar
-        self.procesadores_listos = threading.Condition()
-        self.listos_para_procesar = False # Bandera para controlar el estado
-
         # Los hilos procesadores (operadores)
         self.num_procesadores = 3
         self.hilos_procesadores = []
@@ -45,7 +45,7 @@ class CentralDePedidos:
         print(f"Servidor iniciado en {self.host}:{self.puerto}")
 
         # Lanzamos los hilos procesadores. Estos hilos se quedarán esperando
-        # hasta que la bandera 'listos_para_procesar' sea True.
+        # en la cola de pedidos hasta que llegue la señal de inicio.
         for i in range(self.num_procesadores):
             procesador_hilo = threading.Thread(target=self.procesar_pedidos, daemon=True, name=f"Hilo-Procesador-{i+1}")
             self.hilos_procesadores.append(procesador_hilo)
@@ -76,20 +76,22 @@ class CentralDePedidos:
         cliente_id = cliente_direccion
         print(f"Hilo de cliente para {cliente_id} iniciado.")
 
-        # Cada hilo de cliente se bloqueará aquí hasta que 3 clientes se conecten.
         try:
             print(f"Cliente {cliente_id} esperando a que {self.NUM_CLIENTES_REQUERIDOS} clientes se conecten...")
             # El valor de retorno indica si este hilo es el último en llegar a la barrera
-            # (es el "lider" de la barrera). Solo el líder notificará a los procesadores.
             is_leader = (self.barrera_clientes.wait() == 0) # true si es el último en llegar
 
             if is_leader:
                 print(f"¡{self.NUM_CLIENTES_REQUERIDOS} clientes conectados! La barrera se ha cruzado.")
-                with self.procesadores_listos:
-                    self.listos_para_procesar = True
-                    self.procesadores_listos.notify_all() # Despierta a todos los hilos procesadores
+                # El líder de la barrera pone la señal de inicio en la cola para que los procesadores puedan empezar.
+                # Encolamos la señal por cada procesador para despertarlos a todos.
+                print("El cliente líder encolará la señal de inicio para los procesadores.")
+                for _ in range(self.num_procesadores):
+                    self.semaforo.acquire() # Adquirimos el semáforo para la señal de inicio
+                    self.cola_pedidos.put(INICIO_PROCESAMIENTO_SIGNAL)
+                print("Señales de inicio enviadas a los procesadores.")
             else:
-                print(f"Cliente {cliente_id} cruzó la barrera. Esperando señal de inicio de procesamiento.")
+                print(f"Cliente {cliente_id} cruzó la barrera.")
 
         except threading.BrokenBarrierError:
             print(f"Cliente {cliente_id} Barrera rota, terminando gestión de cliente.")
@@ -183,7 +185,9 @@ class CentralDePedidos:
         self.semaforo.acquire() # Espera si la cola está llena (semáforo en 0)
         with self.lock: # Protege el acceso a la cola
             self.cola_pedidos.put(pedido)
-            print(f"Pedido encolado: {pedido.producto} - {pedido.cantidad} (Cola actual: {self.cola_pedidos.qsize()})")
+            # Solo imprimimos si no es la señal de inicio para evitar ruido.
+            if pedido != INICIO_PROCESAMIENTO_SIGNAL: 
+                print(f"Pedido encolado: {pedido.producto} - {pedido.cantidad} (Cola actual: {self.cola_pedidos.qsize()})")
         # El semáforo no se libera aquí; se libera cuando el procesador saca un pedido de la cola.
 
     def procesar_pedidos(self):
@@ -192,13 +196,24 @@ class CentralDePedidos:
         """
         thread_name = threading.current_thread().name
         
-        # **CAMBIO AQUÍ: Los hilos procesadores esperan una señal.**
-        with self.procesadores_listos:
-            while not self.listos_para_procesar:
-                print(f"{thread_name} esperando que los clientes crucen la barrera para empezar...")
-                self.procesadores_listos.wait() # Se libera el lock y el hilo espera
+        print(f"{thread_name} esperando la señal de inicio de procesamiento...")
+        
+        # Cada procesador intentará sacar de la cola. Se bloqueará hasta que haya algo.
+        # El primer elemento que saca debe ser la señal de inicio.
+        inicio_signal = self.cola_pedidos.get()
+        self.semaforo.release() # Liberar el semáforo para la señal de inicio
 
-        print(f"{thread_name} ha recibido la señal. Empezando a procesar pedidos.")
+        if inicio_signal == INICIO_PROCESAMIENTO_SIGNAL:
+            print(f"{thread_name} ha recibido la señal de inicio. Empezando a procesar pedidos.")
+        else:
+            # Esto no debería pasar si la lógica es correcta, pero es un buen control.
+            print(f"{thread_name} Error: Recibió un elemento inesperado al inicio: {inicio_signal}")
+            # Si el primer elemento no es la señal de inicio, lo volvemos a poner y esperamos el correcto.
+            self.semaforo.acquire()
+            self.cola_pedidos.put(inicio_signal)
+            time.sleep(0.1) # Pequeña pausa para evitar un bucle de error agresivo
+            return # Podría reiniciar el bucle si fuera más complejo, pero para el ejemplo, terminamos.
+
 
         while True:
             try:
