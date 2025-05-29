@@ -20,10 +20,19 @@ class CentralDePedidos:
         self.cola_pedidos = Queue(max_pedidos)  # Cola para pedidos con capacidad máxima
         self.semaforo = threading.Semaphore(max_pedidos)  # Semáforo para controlar la capacidad de la cola
         self.lock = threading.Lock()  # Lock para sincronizar el acceso a la cola y al stock
+        
+        # **Sincronización para el inicio de procesamiento de pedidos**
+        # La barrera ahora espera que 3 hilos de clientes se conecten.
+        self.NUM_CLIENTES_REQUERIDOS = 3 
+        self.barrera_clientes = threading.Barrier(self.NUM_CLIENTES_REQUERIDOS)
+        
+        # Variable de condición para indicar a los hilos procesadores que pueden iniciar
+        self.procesadores_listos = threading.Condition()
+        self.listos_para_procesar = False # Bandera para controlar el estado
 
-        # **CAMBIO AQUÍ: Definimos el número de hilos procesadores y la barrera para ellos.**
-        self.num_procesadores = 3 # Ahora tenemos 3 hilos procesadores
-        self.barrera = threading.Barrier(self.num_procesadores) # La barrera espera a 3 hilos
+        # Los hilos procesadores (operadores)
+        self.num_procesadores = 3
+        self.hilos_procesadores = []
 
 
     def iniciar_servidor(self):
@@ -35,15 +44,16 @@ class CentralDePedidos:
         servidor_socket.listen(5)
         print(f"Servidor iniciado en {self.host}:{self.puerto}")
 
-        # **CAMBIO AQUÍ: Lanzamos los 3 hilos procesadores.**
+        # Lanzamos los hilos procesadores. Estos hilos se quedarán esperando
+        # hasta que la bandera 'listos_para_procesar' sea True.
         for i in range(self.num_procesadores):
             procesador_hilo = threading.Thread(target=self.procesar_pedidos, daemon=True, name=f"Hilo-Procesador-{i+1}")
+            self.hilos_procesadores.append(procesador_hilo)
             procesador_hilo.start()
-            print(f"{procesador_hilo.name} iniciado.")
-
+            print(f"{procesador_hilo.name} iniciado y esperando la señal de los clientes.")
 
         while True:
-            print("Esperando conexiones...")
+            print("Esperando conexiones de clientes...")
             try:
                 cliente_socket, cliente_direccion = servidor_socket.accept()
                 print(f"Conexión establecida con {cliente_direccion}")
@@ -59,12 +69,34 @@ class CentralDePedidos:
     def gestionar_cliente(self, cliente_socket, cliente_direccion):
         """
         Gestiona la conexión con un cliente.
+        Este es el hilo de cliente que participará en la barrera.
         :param cliente_socket: Socket del cliente conectado.
         :param cliente_direccion: Dirección del cliente.
         """
         cliente_id = cliente_direccion
+        print(f"Hilo de cliente para {cliente_id} iniciado.")
 
-        # Enviar lista de productos al cliente
+        # Cada hilo de cliente se bloqueará aquí hasta que 3 clientes se conecten.
+        try:
+            print(f"Cliente {cliente_id} esperando a que {self.NUM_CLIENTES_REQUERIDOS} clientes se conecten...")
+            # El valor de retorno indica si este hilo es el último en llegar a la barrera
+            # (es el "lider" de la barrera). Solo el líder notificará a los procesadores.
+            is_leader = (self.barrera_clientes.wait() == 0) # true si es el último en llegar
+
+            if is_leader:
+                print(f"¡{self.NUM_CLIENTES_REQUERIDOS} clientes conectados! La barrera se ha cruzado.")
+                with self.procesadores_listos:
+                    self.listos_para_procesar = True
+                    self.procesadores_listos.notify_all() # Despierta a todos los hilos procesadores
+            else:
+                print(f"Cliente {cliente_id} cruzó la barrera. Esperando señal de inicio de procesamiento.")
+
+        except threading.BrokenBarrierError:
+            print(f"Cliente {cliente_id} Barrera rota, terminando gestión de cliente.")
+            cliente_socket.close()
+            return
+        
+        # Continuar con la interacción del cliente
         productos_lista = list(self.productos.keys())
         productos_str = "\n".join(
             [
@@ -77,13 +109,12 @@ class CentralDePedidos:
 
         while True:
             try:
-                # Solicitar producto por número (y esperar la entrada del cliente)
                 cliente_socket.sendall(
                     "Seleccione un producto (número):\n".encode("utf-8")
                 )
                 producto_idx_raw = cliente_socket.recv(1024).decode("utf-8").strip()
 
-                if not producto_idx_raw: # Cliente se desconectó
+                if not producto_idx_raw: 
                     print(f"Cliente {cliente_id} desconectado.")
                     break
 
@@ -94,21 +125,20 @@ class CentralDePedidos:
                         cliente_socket.sendall(
                             "Número de producto inválido. Intente nuevamente.\n".encode("utf-8")
                         )
-                        continue # Pide de nuevo el producto
+                        continue 
                     producto = productos_lista[producto_idx]
                 except ValueError:
                     cliente_socket.sendall(
                         "Entrada inválida. Debe ser un número.\n".encode("utf-8")
                     )
-                    continue # Pide de nuevo el producto
+                    continue 
 
-                # Solicitar cantidad (y esperar la entrada del cliente)
                 cliente_socket.sendall(
                     f"Indique la cantidad para {producto}:\n".encode("utf-8")
                 )
                 cantidad_raw = cliente_socket.recv(1024).decode("utf-8").strip()
 
-                if not cantidad_raw: # Cliente se desconectó
+                if not cantidad_raw: 
                     print(f"Cliente {cliente_id} desconectado.")
                     break
 
@@ -119,23 +149,20 @@ class CentralDePedidos:
                             cliente_socket.sendall(
                                 "Cantidad no válida o insuficiente en stock.\n".encode("utf-8")
                             )
-                            continue # Pide de nuevo la cantidad
+                            continue 
                         
-                        # Si todo es válido, encolar el pedido
                         pedido = Pedido(cliente_id, producto, cantidad)
                         self.encolar_pedido(pedido)
                         self.productos[producto] -= cantidad
                         cliente_socket.sendall(
                             f"Pedido de {producto} x {cantidad} recibido.\n".encode("utf-8")
                         )
-                        # El cliente enviará un nuevo producto/cantidad después de recibir esto.
-                        # Aquí puedes agregar un "break" si el cliente solo debe hacer 1 pedido por conexión.
 
                 except ValueError:
                     cliente_socket.sendall(
                         "Cantidad no válida. Debe ser un número.\n".encode("utf-8")
                     )
-                    continue # Pide de nuevo la cantidad
+                    continue 
 
             except ConnectionResetError:
                 print(f"Cliente {cliente_id} ha cerrado la conexión abruptamente.")
@@ -164,17 +191,14 @@ class CentralDePedidos:
         Procesa los pedidos en la cola compartida.
         """
         thread_name = threading.current_thread().name
-        print(f"{thread_name} listo para procesar pedidos. Esperando a los demás procesadores en la barrera...")
         
-        # **CAMBIO AQUÍ: La barrera se espera UNA VEZ al inicio del ciclo de vida del procesador.**
-        try:
-            # Los 3 hilos procesadores se bloquearán aquí hasta que todos lleguen a este punto.
-            # Una vez que los 3 estén aquí, todos cruzarán la barrera al mismo tiempo.
-            self.barrera.wait()
-            print(f"{thread_name} cruzó la barrera. Empezando a procesar pedidos.")
-        except threading.BrokenBarrierError:
-            print(f"{thread_name} Barrera rota, terminando.")
-            return # Termina el hilo si la barrera se rompe
+        # **CAMBIO AQUÍ: Los hilos procesadores esperan una señal.**
+        with self.procesadores_listos:
+            while not self.listos_para_procesar:
+                print(f"{thread_name} esperando que los clientes crucen la barrera para empezar...")
+                self.procesadores_listos.wait() # Se libera el lock y el hilo espera
+
+        print(f"{thread_name} ha recibido la señal. Empezando a procesar pedidos.")
 
         while True:
             try:
@@ -188,7 +212,7 @@ class CentralDePedidos:
 
             except Exception as e:
                 print(f"{thread_name} error al procesar pedido: {e}")
-                time.sleep(0.5) # Pausa para evitar un bucle de error rápido
+                time.sleep(0.5) 
 
 
 # Clase Pedido (guárdala en un archivo 'pedido.py')
@@ -206,7 +230,7 @@ if __name__ == "__main__":
     productos_disponibles = {"Producto1": 100, "Producto2": 50, "Producto3": 75}
     central = CentralDePedidos(
         "127.0.0.1", 9000, max_pedidos=10, productos=productos_disponibles
-    ) # Usar localhost para pruebas en tu propia máquina
+    ) 
 
     # Iniciar el servidor en un hilo
     servidor_hilo = threading.Thread(target=central.iniciar_servidor, daemon=True)
@@ -215,6 +239,6 @@ if __name__ == "__main__":
     print("Servidor iniciado. Presione Ctrl+C para detener.")
     try:
         while True:
-            time.sleep(1) # Mantener el hilo principal activo
+            time.sleep(1) 
     except KeyboardInterrupt:
         print("\nServidor detenido.")

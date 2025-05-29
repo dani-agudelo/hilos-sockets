@@ -9,3 +9,6 @@ class Pedido:
         self.cliente_id = cliente_id
         self.producto = producto
         self.cantidad = cantidad
+
+    def __repr__(self):
+        return f"Pedido(Cliente: {self.cliente_id}, Producto: {self.producto}, Cantidad: {self.cantidad})"
